@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr"> <!-- Déclaration de la langue en français -->
+<head>
+    <!-- Méta-informations pour définir le jeu de caractères et la vue initiale -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Titre de la page -->
+    <title>Recherche DRÄXLMAIER</title>
+    
+    <!-- Lien vers la feuille de style Bootstrap -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    
+    <!-- Script pour la manipulation des fichiers Excel (XLSX) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.4/xlsx.full.min.js"></script>
+    
+    <!-- Styles CSS pour la mise en page -->
+    <style>
+        body {
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        #messageDisplay {
+            margin-top: 20px;
+        }
+
+        .logo {
+            max-width: 20ch;
+            height: auto;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Conteneur principal de la page -->
+    <div class="container">
+        <!-- Logo de DRÄXLMAIER -->
+        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/DR%C3%84XLMAIER_Group_Logo.svg/2560px-DR%C3%84XLMAIER_Group_Logo.svg.png" alt="Logo DRÄXLMAIER" class="logo">
+        
+        <!-- En-tête principal de la page -->
+        <h1 class="display-4">Recherche DRÄXLMAIER</h1>
+
+        <!-- Formulaire de recherche avec étiquette et champ de saisie CIN -->
+        <form id="searchForm">
+            <div class="form-group">
+                <label for="cinInput">Entrer le CIN :</label>
+                <input type="text" class="form-control" id="cinInput" required>
+            </div>
+            
+            <!-- Bouton de recherche -->
+            <button type="button" class="btn btn-primary" onclick="search()">Rechercher</button>
+        </form>
+
+        <!-- Zone d'affichage des messages -->
+        <div id="messageDisplay"></div>
+    </div>
+
+    <!-- Script JavaScript pour la fonction de recherche -->
+    <script>
+        function search() {
+            var cin = document.getElementById('cinInput').value.trim();
+
+            if (cin !== '') {
+                var filePath = 'data.xlsx';
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', filePath, true);
+                xhr.responseType = 'arraybuffer';
+
+                xhr.onload = function(e) {
+                    if (xhr.status == 200) {
+                        var data = new Uint8Array(xhr.response);
+                        var workbook = XLSX.read(data, { type: 'array' });
+                        var sheetName = workbook.SheetNames[0];
+                        var sheet = workbook.Sheets[sheetName];
+
+                        var jsonData = XLSX.utils.sheet_to_json(sheet);
+
+                        var filteredData = jsonData.filter(function(row) {
+                            return String(row.CIN).toLowerCase() === cin.toLowerCase();
+                        });
+
+                        var messageDisplay = document.getElementById('messageDisplay');
+
+                        if (filteredData.length > 0) {
+                            console.log("Filtered Data:", filteredData);
+
+                            var contentHTML = '<p> CIN : ' + cin + ' </p>';
+                            contentHTML += '<div class="table-responsive">';
+                            contentHTML += '<table class="table table-bordered table-striped table-hover">';
+                            contentHTML += '<thead class="thead-dark"><tr>';
+                            
+                            var columnsToShow = ['CIN', 'Mat.', 'Nom et Prénom', 'Cat. de prêt', 'Solde', 'Début', 'Fin'];
+
+                            columnsToShow.forEach(function(column) {
+                                contentHTML += '<th scope="col">' + column + '</th>';
+                            });
+
+                            contentHTML += '</tr></thead><tbody>';
+
+                            filteredData.forEach(function(row) {
+                                console.log("Row Data:", row);
+
+                                contentHTML += '<tr>';
+                                contentHTML += '<td>' + row['CIN'] + '</td>';
+                                contentHTML += '<td>' + row['Mat.'] + '</td>';
+                                contentHTML += '<td>' + row['Matricule'] + '</td>'; // Assuming Matricule is now Nom et Prénom
+                                contentHTML += '<td>' + row['Cat. de prêt'] + '</td>';
+                                contentHTML += '<td>' + row['Solde'] + '</td>';
+                                contentHTML += '<td>' + formatDate(row['Début']) + '</td>'; // Assuming 'Début' is a date field
+                                contentHTML += '<td>' + formatDate(row['Fin']) + '</td>'; // Assuming 'Fin' is a date field
+                                contentHTML += '</tr>';
+                            });
+
+                            contentHTML += '</tbody></table>';
+                            contentHTML += '</div>';
+                            messageDisplay.innerHTML = contentHTML;
+                        } else {
+                            messageDisplay.innerHTML = '<p>Aucune donnée trouvée pour CIN ' + cin + '.</p>';
+                        }
+                    } else {
+                        console.error('Échec du chargement du fichier Excel. Code d\'état :', xhr.status);
+                    }
+                };
+
+                xhr.onerror = function(e) {
+                    console.error('Une erreur s\'est produite lors du chargement du fichier Excel.', e);
+                };
+
+                xhr.send();
+            } else {
+                alert('Veuillez entrer un CIN valide.');
+            }
+        }
+
+        function formatDate(dateString) {
+            if (typeof dateString === 'number' && !isNaN(dateString)) {
+                // Assuming the date value is a number representing the number of days since a reference date
+                var formattedDate = getJsDateFromExcel(dateString).toLocaleDateString('fr-FR');
+                return formattedDate;
+            } else if (typeof dateString === 'string' && dateString.trim() !== '') {
+                var dateParts = dateString.split("/");
+                if (dateParts.length === 3) {
+                    var day = dateParts[0];
+                    var month = dateParts[1];
+                    var year = dateParts[2];
+
+                    // Ensure leading zeros for day and month
+                    day = day.length === 1 ? '0' + day : day;
+                    month = month.length === 1 ? '0' + month : month;
+
+                    var formattedDate = year + '/' + month + '/' + day;
+                    return formattedDate;
+                } else {
+                    console.error('Invalid date format:', dateString);
+                    return dateString; // Return the original string if the format is not as expected
+                }
+            } else {
+                console.error('Invalid date value:', dateString);
+                return dateString; // Return the original value if it's not a valid number or string
+            }
+        }
+
+        function getJsDateFromExcel(excelDate) {
+            const SECONDS_IN_DAY = 24 * 60 * 60;
+            const MISSING_LEAP_YEAR_DAY = SECONDS_IN_DAY * 1000;
+            const MAGIC_NUMBER_OF_DAYS = (25567 + 2);    
+            
+            if (!Number(excelDate)) {
+                alert('wrong input format');
+            }
+
+            const delta = excelDate - MAGIC_NUMBER_OF_DAYS;
+            const parsed = delta * MISSING_LEAP_YEAR_DAY;
+            const date = new Date(parsed);
+
+            return date;
+        }
+    </script>
+
+    <!-- Scripts JavaScript Bootstrap et Popper.js (nécessaires pour certains composants Bootstrap) -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+</body>
+</html>
